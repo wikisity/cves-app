@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  font-family: 'Outfit', 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+p {
+  font-size: 1.6rem;
+}
+
+h1 {
+  font-size: 6rem;
+}
+
+.app {
+  width: 100%;
+  height: 100vh;
+  position: relative;
+  background-color: rgba(0, 0, 0, 0.4);
+  color: #fff;
+}
+
+.app::before {
+  content: '';
+  background: url('./assets/earth.jpg') no-repeat center center/cover;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  z-index: -1;
+}
+
+.app .search {
+  text-align: center;
+  padding: 1rem;
+  margin-top: 20px;
+}
+
+.app input {
+  padding: .7rem 1.5rem;
+  font-size: 1.2rem;
+  border-radius: 25px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8f8f8;
+}
+
+.container {
+  max-width: 700px;
+  height: 700px;
+  margin: auto;
+  padding: 0 1rem;
+  position: relative;
+  top: 10%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.app .top {
+  width: 100%;
+  margin: 1rem auto;
+}
+
+
+h3 {
+  margin-bottom: 20px;
+}
+
+table {
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  width: 900px;
+  height: 200px;
+  border-radius: 12px;
+}
+
+th {
+  border-right: 1px solid white;
+}
+
+tr td {
+  border-top: 1px solid white;
+  text-align: center;
+  border-right: 1px solid white;
+}
+
+
+.app .id {
+  width: 19%;
+  position: relative;
+}
+
+.app .th-date {
+  border-right: none;
+}
+
+.app .td-date {
+  border-right: none;
+  width: 28%;
+}
+
+.app .td-descp {
+  width: 35%;
+}
+
+.app .td-attcomp {
+  width: 10%;
+}
+
+.app .title {
+  padding-top: 5px auto;
+  position: relative;
+}

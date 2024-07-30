@@ -1,0 +1,271 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Testing Store CVEs method
+
+
+Parameters:
+  depBucketName:
+    Type: String
+    Description:  Name of Deployment Bucket 
+
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    MemorySize: 1792 # One full vCPU
+    Timeout: 180 # Default timeout for API Gateway. Make it consistent with Lambda
+  Api:
+    EndpointConfiguration: REGIONAL
+    Cors:
+      AllowOrigin: "'*'"    
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+
+
+Resources:
+  ##################################################################
+  ########################### API Lambda Functions #################
+  ##################################################################
+  FilteredCvesSeverities:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: ./src/store-cves.zip
+      Handler: store_cves.handler
+      Description: Function pulls latest NIST CVE threats and store filtered attributes to AWS DynamoDB
+      Runtime: python3.11
+      Environment:
+        Variables:
+          DEPLOYMENT_BUCKET_NAME: !Ref depBucketName
+      Policies:
+      Role: !GetAtt S3AccessTempRole.Arn    
+      Events:
+        StartScheduledEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(6 hours)  # function is triggered every 6 hours
+
+  GetCveById:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: ./src2/single-cve.zip
+      Handler: single_cve.handler
+      Description: Function to extrapolate a unique CVE item from DynamoDB database 
+      Runtime: python3.11
+      Environment:
+        Variables:
+          DEPLOYMENT_BUCKET_NAME: !Ref depBucketName
+      Policies:
+      Role: !GetAtt S3AccessTempRole.Arn    
+      Events:
+        UniqueCve:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /cve
+            Method: get
+            RequestParameters:
+              - method.request.querystring.Id:
+                  Required: true
+                  Caching: false
+
+    
+  ScanCvesBySeverity:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: ./src3/severity-cves.zip
+      Handler: severity.handler
+      Description: Function to extrapolate cve items by severity from DynamoDB database 
+      Runtime: python3.11
+      Environment:
+        Variables:
+          DEPLOYMENT_BUCKET_NAME: !Ref depBucketName
+      Policies:
+      Role: !GetAtt S3AccessTempRole.Arn    
+      Events:
+        CvesBySeverity:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /cves
+            Method: get
+            RequestParameters:
+              - method.request.querystring.severity:
+                  Required: true
+                  Caching: false
+
+
+  RequestCvesPublishedBetweenDates:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: ./src5/cves-published-between-dates.zip
+      Handler: cves_published_between_dates.handler
+      Description: Function to Query the NVD and return 2 CVEs published between the start and end dates 
+      Runtime: python3.11
+      Environment:
+        Variables:
+          DEPLOYMENT_BUCKET_NAME: !Ref depBucketName
+      Policies:
+      Role: !GetAtt S3AccessTempRole.Arn    
+      Events:
+        CvesByPublicationDates:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /dateRange
+            Method: get
+            RequestParameters:
+              - method.request.querystring.pubStartDate:
+                  Required: true
+                  Caching: false
+              - method.request.querystring.pubEndDate:
+                  Required: true
+                  Caching: false
+
+
+  RequestCvesDatesAndSeverity:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: ./src5/cves-multi-filtering.zip
+      Handler: cves_multi_filtering.handler
+      Description: Function to Query the NVD and return a CVE published between the start and end dates for that severity 
+      Runtime: python3.11
+      Environment:
+        Variables:
+          DEPLOYMENT_BUCKET_NAME: !Ref depBucketName
+      Policies:
+      Role: !GetAtt S3AccessTempRole.Arn    
+      Events:
+        CvesByPublicationDatesAndSeverity:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /dateSev
+            Method: get
+            RequestParameters:
+              - method.request.querystring.pubStartDate:
+                  Required: true
+                  Caching: false
+              - method.request.querystring.pubEndDate:
+                  Required: true
+                  Caching: false
+              - method.request.querystring.severity:
+                  Required: true
+                  Caching: false
+
+
+  ProjectArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref depBucketName
+      AccessControl: Private
+      LifecycleConfiguration:
+        Rules:
+         - Id: DeleteContentAfter1Day
+           Status: 'Enabled'
+           ExpirationInDays: 1
+
+
+  S3AccessTempRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole    
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - s3:PutObject
+                  - s3:GetBucketPolicy
+                  - s3:GetObject
+                  - s3:ListBucket
+                Effect: Allow
+                Resource:
+                  - !Join ['',['arn:aws:s3:::',!Ref depBucketName, '/*']]
+                  - !Join ['',['arn:aws:s3:::',!Ref depBucketName]]
+            Version: "2012-10-17"
+          PolicyName: ProjectArtifactS3Policy
+
+
+  ########## DYNAMODB GLOBAL TABLE to ensure service tolerate AZ and regions failures #############
+  ProjectDynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: "cvesData"
+      AttributeDefinitions:
+        - AttributeName: "Id"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "Id"
+          KeyType: "HASH"
+      TimeToLiveSpecification:
+        AttributeName: TimeToLive
+        Enabled: true
+      ProvisionedThroughput:
+        ReadCapacityUnits: 10
+        WriteCapacityUnits: 10
+
+  UserTableWriteCapacityScalableTarget: 
+    Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+    Properties: 
+      MaxCapacity: 15
+      MinCapacity: 1  
+      ResourceId: !Join
+        - /
+        - - table
+          - !Ref ProjectDynamoDBTable
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/dynamodb.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_DynamoDBTable
+      ScalableDimension: "dynamodb:table:WriteCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserTableWriteScalingPolicy: 
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    Properties: 
+      PolicyName: WriteAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: 
+        Ref: UserTableWriteCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration: 
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  UserTableReadCapacityScalableTarget: 
+    Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+    Properties: 
+      MaxCapacity: 15
+      MinCapacity: 1  
+      ResourceId: !Join
+        - /
+        - - table
+          - !Ref ProjectDynamoDBTable
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/dynamodb.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_DynamoDBTable
+      ScalableDimension: "dynamodb:table:ReadCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserTableReadScalingPolicy: 
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    Properties: 
+      PolicyName: ReadAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: 
+        Ref: UserTableReadCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration: 
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+
+
+# Epoch time of 2 years, 2023/09/06 18h:30:00 === 1694050200
+
